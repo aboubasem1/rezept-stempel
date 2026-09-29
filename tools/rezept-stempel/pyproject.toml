@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rezept-stempel"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lokales Werkzeug zum Stempeln von Rezept-PDFs mit Mengenangabe und Datum"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,9 +14,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+desktop = ["tkinterdnd2>=0.4.0", "pyinstaller>=6.0"]
 
 [project.scripts]
 rezept-stempel = "rezept_stempel.app:main"
+
+[project.gui-scripts]
+rezept-stempel-gui = "rezept_stempel.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import sys
 import tkinter as tk
+from dataclasses import dataclass, field
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import pymupdf
 
 from rezept_stempel.dates import now_berlin
+from rezept_stempel.dnd import enable_file_drop
+from rezept_stempel.drop import collect_pdfs
 from rezept_stempel.grams import DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, STEP_GRAMS, step_grams
 from rezept_stempel.layout import (
     STAMP_COLOR,
@@ -25,15 +28,25 @@ PAPER = "#f6f2ea"
 INK = "#1c1c1c"
 MUTED = "#5a5a5a"
 ACCENT = "#1e4d7b"
+DROP_HINT = "PDFs hierher ziehen — oder über „PDF öffnen“ wählen."
+
+
+@dataclass
+class DocumentSession:
+    path: Path
+    overlays: list[Overlay] = field(default_factory=list)
+    page_index: int = 0
 
 
 class RezeptStempelApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Rezept-Stempel")
-        self.minsize(820, 640)
+        self.minsize(960, 640)
         self.configure(bg=PAPER)
 
+        self.sessions: dict[Path, DocumentSession] = {}
+        self._order: list[Path] = []
         self.source_path: Path | None = None
         self.doc: pymupdf.Document | None = None
         self.page_index = 0
@@ -42,11 +55,24 @@ class RezeptStempelApp(tk.Tk):
         self.overlays: list[Overlay] = []
         self._page_image: tk.PhotoImage | None = None
         self._ghost: tuple[float, float] | None = None
+        self._syncing_list = False
 
         self._build_style()
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self._set_status("Keine Datei geöffnet. Wählen Sie ein Rezept-PDF über „PDF öffnen“.")
+        self._set_status("Bereit. PDFs auf das Fenster ziehen oder über „PDF öffnen“ wählen.")
+        self.after_idle(self._install_drop)
+
+    def _install_drop(self) -> None:
+        kind = enable_file_drop(self, self.open_paths)
+        if kind == "tkdnd":
+            enable_file_drop(self.canvas, self.open_paths)
+            enable_file_drop(self.file_list, self.open_paths)
+        if kind == "none" and self.source_path is None:
+            self._set_status(
+                "PDFs auf die Desktop-Verknüpfung ziehen oder „PDF öffnen“. "
+                "Drop ins Fenster: Windows-Build (build.ps1) oder pip install -e \".[desktop]\"."
+            )
 
     def _build_style(self) -> None:
         style = ttk.Style(self)
@@ -60,6 +86,7 @@ class RezeptStempelApp(tk.Tk):
         style.configure("Stamp.TLabel", background=PAPER, foreground=ACCENT, font=("TkDefaultFont", 12, "bold"))
         style.configure("Status.TLabel", background="#e7e2d8", foreground=INK, padding=6)
         style.configure("Accent.TButton", font=("TkDefaultFont", 10, "bold"))
+        style.configure("Sidebar.TFrame", background=PAPER)
 
     def _build_ui(self) -> None:
         toolbar = ttk.Frame(self, style="Toolbar.TFrame", padding=(12, 10, 12, 6))
@@ -84,16 +111,38 @@ class RezeptStempelApp(tk.Tk):
             meta,
             style="Hint.TLabel",
             text=(
-                f"Klick setzt den Stempel (auf Rp-Zeilen einrastend). "
-                f"Mausrad: Menge {MIN_GRAMS}–{MAX_GRAMS} g in {STEP_GRAMS}er-Schritten. "
-                "„Erste Rp-Zeile“ setzt die Standardposition. Speichern schreibt neben das Original."
+                "PDFs per Drag & Drop öffnen. Klick setzt den Stempel (Rp-Zeilen rasten ein). "
+                f"Mausrad: {MIN_GRAMS}–{MAX_GRAMS} g in {STEP_GRAMS}er-Schritten. "
+                "Speichern schreibt neben das Original, ohne es zu überschreiben."
             ),
         ).pack(anchor="w", pady=(4, 0))
         self._refresh_stamp_label()
 
-        body = ttk.Frame(self)
-        body.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        mid = ttk.Frame(self)
+        mid.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        mid.columnconfigure(1, weight=1)
+        mid.rowconfigure(0, weight=1)
 
+        sidebar = ttk.Frame(mid, style="Sidebar.TFrame", padding=(0, 0, 10, 0))
+        sidebar.grid(row=0, column=0, sticky="nsw")
+        ttk.Label(sidebar, text="Offene Dateien").pack(anchor="w")
+        ttk.Label(sidebar, style="Hint.TLabel", text="Mehrere PDFs ablegen möglich").pack(anchor="w", pady=(0, 4))
+        self.file_list = tk.Listbox(
+            sidebar,
+            width=28,
+            height=24,
+            activestyle="dotbox",
+            selectmode="browse",
+            background="#fffdf8",
+            highlightthickness=1,
+            highlightbackground="#cfc8bb",
+        )
+        self.file_list.pack(fill="y", expand=True)
+        self.file_list.bind("<<ListboxSelect>>", self._on_list_select)
+        ttk.Button(sidebar, text="Aktuelle schließen", command=self.close_current).pack(anchor="w", pady=(6, 0))
+
+        body = ttk.Frame(mid)
+        body.grid(row=0, column=1, sticky="nsew")
         self.canvas = tk.Canvas(body, background="#d8d3c8", highlightthickness=0, cursor="crosshair")
         vbar = ttk.Scrollbar(body, orient="vertical", command=self.canvas.yview)
         hbar = ttk.Scrollbar(body, orient="horizontal", command=self.canvas.xview)
@@ -105,11 +154,12 @@ class RezeptStempelApp(tk.Tk):
         body.columnconfigure(0, weight=1)
 
         self.empty_hint = self.canvas.create_text(
-            400,
+            420,
             280,
-            text="Rezept-PDF öffnen, um den Stempel zu setzen.",
+            text=DROP_HINT,
             fill=MUTED,
             font=("TkDefaultFont", 13),
+            width=520,
         )
 
         self.status = ttk.Label(self, style="Status.TLabel", anchor="w")
@@ -149,12 +199,12 @@ class RezeptStempelApp(tk.Tk):
         return self._nudge_grams(direction)
 
     def open_pdf(self) -> None:
-        chosen = filedialog.askopenfilename(
-            title="Rezept-PDF öffnen",
+        chosen = filedialog.askopenfilenames(
+            title="Rezept-PDFs öffnen",
             filetypes=[("PDF-Dateien", "*.pdf"), ("Alle Dateien", "*.*")],
         )
         if chosen:
-            self._load_path(Path(chosen))
+            self.open_paths([Path(item) for item in chosen])
 
     def open_sample(self) -> None:
         sample = default_sample_path()
@@ -164,35 +214,131 @@ class RezeptStempelApp(tk.Tk):
                 f"Die Musterdatei wurde nicht gefunden:\n{sample}",
             )
             return
-        self._load_path(sample)
+        self.open_paths([sample])
 
-    def _load_path(self, path: Path) -> None:
+    def open_paths(self, paths: list[Path]) -> None:
+        pdfs = collect_pdfs(list(paths))
+        if not pdfs:
+            messagebox.showinfo("Keine PDF", "Bitte eine oder mehrere PDF-Dateien ablegen (oder einen Ordner mit PDFs).")
+            return
+        errors: list[str] = []
+        first: Path | None = None
+        for path in pdfs:
+            try:
+                key = self._add_pdf(path)
+            except Exception as exc:  # noqa: BLE001 — Dateifehler an die Oberfläche
+                errors.append(f"{path.name}: {exc}")
+                continue
+            if first is None:
+                first = key
+        if first is not None:
+            self._show(first)
+        self._refresh_file_list()
+        if errors:
+            messagebox.showerror("Einige Dateien konnten nicht geöffnet werden", "\n".join(errors[:8]))
+
+    def _add_pdf(self, path: Path) -> Path:
+        path = path.expanduser()
+        if not path.is_file():
+            raise FileNotFoundError(f"Datei nicht gefunden: {path}")
+        key = path.resolve()
+        if key.suffix.lower() != ".pdf":
+            raise ValueError("Nur PDF-Dateien.")
+        if key in self.sessions:
+            return key
+        doc = pymupdf.open(key)
         try:
-            doc = pymupdf.open(path)
-        except Exception as exc:  # noqa: BLE001 — Dateifehler an die Oberfläche
-            messagebox.showerror("PDF konnte nicht geöffnet werden", str(exc))
-            return
-        if doc.is_encrypted:
+            if doc.is_encrypted:
+                raise ValueError("Passwortgeschützte PDFs werden nicht unterstützt.")
+        finally:
             doc.close()
-            messagebox.showerror("Geschützte Datei", "Passwortgeschützte PDFs werden nicht unterstützt.")
+        self.sessions[key] = DocumentSession(path=key)
+        self._order.append(key)
+        return key
+
+    def _stash(self) -> None:
+        if self.source_path is None:
             return
+        key = self.source_path.resolve()
+        session = self.sessions.get(key)
+        if session is None:
+            return
+        session.overlays = list(self.overlays)
+        session.page_index = self.page_index
+
+    def _show(self, key: Path) -> None:
+        self._stash()
+        session = self.sessions[key]
         self._close_doc()
-        self.doc = doc
-        self.source_path = path
-        self.page_index = 0
-        self.overlays = []
+        self.doc = pymupdf.open(session.path)
+        self.source_path = session.path
+        self.overlays = list(session.overlays)
+        self.page_index = session.page_index
         self._ghost = None
         self._render_page()
         self._set_status(
-            f"Geöffnet: {path}  —  Klick oder „Erste Rp-Zeile“ setzt den Stempel, Speichern schreibt daneben."
+            f"Geöffnet: {session.path}  —  Stempel setzen, Speichern schreibt daneben."
         )
+
+    def _refresh_file_list(self) -> None:
+        self._syncing_list = True
+        self.file_list.delete(0, "end")
+        current = self.source_path.resolve() if self.source_path is not None else None
+        select = 0
+        for index, key in enumerate(self._order):
+            self.file_list.insert("end", key.name)
+            if key == current:
+                select = index
+        if self._order:
+            self.file_list.selection_set(select)
+            self.file_list.see(select)
+        self._syncing_list = False
+
+    def _on_list_select(self, _event: tk.Event) -> None:
+        if self._syncing_list:
+            return
+        selection = self.file_list.curselection()
+        if not selection:
+            return
+        key = self._order[int(selection[0])]
+        if self.source_path is None or key != self.source_path.resolve():
+            self._show(key)
+            self._refresh_file_list()
+
+    def close_current(self) -> None:
+        if self.source_path is None:
+            return
+        key = self.source_path.resolve()
+        self._close_doc()
+        self.source_path = None
+        self.overlays = []
+        self.page_index = 0
+        self.sessions.pop(key, None)
+        if key in self._order:
+            self._order.remove(key)
+        if self._order:
+            self._show(self._order[0])
+        else:
+            self.canvas.delete("all")
+            self.empty_hint = self.canvas.create_text(
+                420, 280, text=DROP_HINT, fill=MUTED, font=("TkDefaultFont", 13), width=520
+            )
+            self.page_label.configure(text="Seite —")
+            self._set_status("Keine Datei geöffnet. PDFs hierher ziehen.")
+        self._refresh_file_list()
+
+    def _load_path(self, path: Path) -> None:
+        """Kompatibilität für Tests und --open."""
+        self.open_paths([path])
 
     def _close_doc(self) -> None:
         if self.doc is not None:
-            self.doc.close()
+            doc = self.doc
             self.doc = None
+            doc.close()
 
     def _on_close(self) -> None:
+        self._stash()
         self._close_doc()
         self.destroy()
 
@@ -333,9 +479,7 @@ class RezeptStempelApp(tk.Tk):
         else:
             self.overlays.append(overlay)
         self._redraw_overlays()
-        self._set_status(
-            f"Stempel auf der ersten Rp-Zeile: {overlay.text()}  —  Klick verschiebt nicht, setzt zusätzlich."
-        )
+        self._set_status(f"Stempel auf der ersten Rp-Zeile: {overlay.text()}")
 
     def undo_last(self) -> None:
         if not self.overlays:
@@ -347,11 +491,12 @@ class RezeptStempelApp(tk.Tk):
 
     def save_pdf(self) -> None:
         if self.source_path is None or self.doc is None:
-            messagebox.showinfo("Keine Datei", "Bitte zuerst ein Rezept-PDF öffnen.")
+            messagebox.showinfo("Keine Datei", "Bitte zuerst ein Rezept-PDF öffnen oder hierher ziehen.")
             return
         if not self.overlays:
             messagebox.showinfo("Kein Stempel", "Setzen Sie zuerst mit einem Klick mindestens einen Stempel.")
             return
+        self._stash()
         try:
             dest = apply_overlays(self.source_path, self.overlays)
         except Exception as exc:  # noqa: BLE001 — Speicherfehler an die Oberfläche
@@ -363,16 +508,29 @@ class RezeptStempelApp(tk.Tk):
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Rezept-PDFs lokal stempeln und neben der Quelle speichern.")
-    parser.add_argument("--open", type=Path, help="PDF beim Start öffnen")
+    parser = argparse.ArgumentParser(
+        description="Rezept-PDFs lokal stempeln und neben der Quelle speichern."
+    )
+    parser.add_argument("--open", type=Path, action="append", default=[], help="PDF beim Start öffnen")
+    parser.add_argument(
+        "files",
+        nargs="*",
+        type=Path,
+        help="PDF-Dateien (auch per Drag & Drop auf die EXE/Verknüpfung)",
+    )
     return parser.parse_args(argv)
+
+
+def startup_paths(args: argparse.Namespace) -> list[Path]:
+    return list(args.open) + list(args.files)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
     app = RezeptStempelApp()
-    if args.open is not None:
-        app._load_path(Path(args.open))
+    paths = startup_paths(args)
+    if paths:
+        app.open_paths(paths)
     app.mainloop()
     return 0
 

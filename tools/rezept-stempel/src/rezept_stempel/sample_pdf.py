@@ -17,6 +17,7 @@ from rezept_stempel.layout import (
     RX_ROW_HEIGHT,
     RX_ROW_TOPS,
 )
+from rezept_stempel.resources import sample_pdf_path
 
 SAMPLE_ID = "TEST-REZEPT-0001"
 SAMPLE_FILENAME = f"{SAMPLE_ID}.pdf"
@@ -33,7 +34,7 @@ RX_ITEMS = (
 
 
 def default_sample_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "samples" / SAMPLE_FILENAME
+    return sample_pdf_path()
 
 
 def write_sample_pdf(dest: Path | None = None) -> Path:
