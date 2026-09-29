@@ -4,14 +4,15 @@ Lokale Apotheken-Werkzeuge. PEOS bleibt unberührt.
 
 ## Rezept-Stempel
 
-Browser-App unter `tools/rezept-stempel/web`: Rezept-PDFs stempeln mit `- (x)g DD.MM.YYYY`.
+Browser-App unter `tools/rezept-stempel/web`.
 
 ```bash
 cd tools/rezept-stempel/web
 npm install
 npm run dev
+npm run build
 ```
 
-Danach `http://127.0.0.1:43174` öffnen.
+Production: GitHub → Vercel auto-deploy (`main` = Production, andere Branches = Preview).
 
 Details: `tools/rezept-stempel/README.md`.

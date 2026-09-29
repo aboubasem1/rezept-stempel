@@ -1,10 +1,9 @@
-# Rezept-Stempel (Web)
+# Rezept-Stempel
 
 ```bash
 npm install
 npm run dev
+npm run build
 ```
 
-Öffnet `http://127.0.0.1:43174`.
-
-Vollständige Bedienung: [`../README.md`](../README.md).
+Production: GitHub → Vercel auto-deploy (`main` = Production, andere Branches = Preview).

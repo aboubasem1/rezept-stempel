@@ -7,8 +7,8 @@ import {
   type MouseEvent,
 } from 'react'
 
-import { overlayDateText, stampText } from './lib/dates'
-import { DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, STEP_GRAMS, stepGrams } from './lib/grams'
+import { stampText } from './lib/dates'
+import { DEFAULT_GRAMS, stepGrams } from './lib/grams'
 import { defaultStampPoint, type Overlay } from './lib/layout'
 import { canvasClickToPdf, drawStamps, loadPdf, renderPageToCanvas } from './lib/pdf'
 import { describeSave, saveStampedPdf } from './lib/save'
@@ -29,7 +29,7 @@ export default function App() {
   const [docs, setDocs] = useState<OpenDoc[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [grams, setGrams] = useState(DEFAULT_GRAMS)
-  const [status, setStatus] = useState('Bereit. PDFs hierher ziehen oder über „PDF öffnen“ wählen.')
+  const [status, setStatus] = useState('PDFs hierher ziehen oder öffnen.')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -380,16 +380,11 @@ export default function App() {
     >
       <header className="top">
         <div>
-          <p className="kicker">Apotheke · lokal im Browser</p>
           <h1>Rezept-Stempel</h1>
-          <p className="lead">
-            PDFs hierher ziehen. Ein Klick setzt <strong>{stampText(grams)}</strong>. Mausrad ändert die
-            Menge ({MIN_GRAMS}–{MAX_GRAMS} g, {STEP_GRAMS}er-Schritte). Speichern schreibt eine neue Datei
-            — das Original bleibt.
-          </p>
+          <p className="privacy">PDFs bleiben im Browser — nichts wird hochgeladen.</p>
         </div>
         <p className="stamp-preview" aria-live="polite">
-          Stempel: {stampText(grams)}
+          {stampText(grams)}
         </p>
       </header>
 
@@ -398,7 +393,7 @@ export default function App() {
           PDF öffnen
         </button>
         <button type="button" onClick={() => void openSample()}>
-          Beispiel öffnen
+          Beispiel
         </button>
         <button type="button" className="primary" onClick={() => void save()} disabled={busy}>
           Speichern
@@ -407,7 +402,7 @@ export default function App() {
           Erste Rp-Zeile
         </button>
         <button type="button" onClick={undo}>
-          Letzten Stempel entfernen
+          Rückgängig
         </button>
         <span className="grams" role="group" aria-label="Menge in Gramm">
           <button type="button" onClick={() => applyGrams(stepGrams(grams, -1))} aria-label="5 Gramm weniger">
@@ -438,10 +433,9 @@ export default function App() {
 
       <div className="workspace">
         <aside className="files">
-          <h2>Offene Dateien</h2>
-          <p className="hint">Mehrere PDFs ablegen möglich</p>
+          <h2>Dateien</h2>
           {docs.length === 0 ? (
-            <p className="empty-files">Noch keine Datei.</p>
+            <p className="empty-files">Keine Datei.</p>
           ) : (
             <ul>
               {docs.map((doc) => (
@@ -464,10 +458,7 @@ export default function App() {
           {!active ? (
             <button type="button" className="dropzone" onClick={() => void openPicker()}>
               <strong>PDFs hierher ziehen</strong>
-              <span>
-                oder klicken, um Dateien zu wählen. Nur TEST-Muster und Ihre lokalen Rezepte — nichts wird
-                hochgeladen.
-              </span>
+              <span>oder öffnen. Speichern schreibt eine neue Datei.</span>
             </button>
           ) : (
             <div className="page-wrap">
@@ -494,9 +485,6 @@ export default function App() {
       ) : null}
       {busy ? <p className="banner muted">Bitte warten …</p> : null}
       <footer className="status">{status}</footer>
-      <p className="fine">
-        Datum {overlayDateText()} · Europe/Berlin · Originaldatei wird nie überschrieben
-      </p>
     </div>
   )
 }

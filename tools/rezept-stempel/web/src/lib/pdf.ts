@@ -13,8 +13,17 @@ import {
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
+const PDFJS_ASSETS = `${import.meta.env.BASE_URL}pdfjs/`
+
 export async function loadPdf(data: ArrayBuffer) {
-  return getDocument({ data: copyBytes(data) }).promise
+  return getDocument({
+    data: copyBytes(data),
+    cMapUrl: `${PDFJS_ASSETS}cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${PDFJS_ASSETS}standard_fonts/`,
+    wasmUrl: `${PDFJS_ASSETS}wasm/`,
+    iccUrl: `${PDFJS_ASSETS}iccs/`,
+  }).promise
 }
 
 export async function renderPageToCanvas(

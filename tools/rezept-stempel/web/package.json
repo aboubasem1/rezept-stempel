@@ -3,12 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 43174",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "lint": "oxlint",
-    "preview": "vite preview --host 127.0.0.1 --port 43174"
+    "preview": "vite preview"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",
