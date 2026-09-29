@@ -1,0 +1,45 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --paper: #f3eee4;
+  --paper-2: #fffdf8;
+  --ink: #1b2430;
+  --muted: #5c6570;
+  --navy: #0d245c;
+  --navy-2: #16357a;
+  --rule: #d7cebf;
+  --danger: #8f1d1d;
+  --ok: #1f4d38;
+  --shadow: 0 10px 30px rgba(27, 36, 48, 0.08);
+  font-family: 'Segoe UI', 'Helvetica Neue', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.45;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #fff8e8 0%, transparent 55%),
+    var(--paper);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

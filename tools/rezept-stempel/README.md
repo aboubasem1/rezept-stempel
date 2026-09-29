@@ -1,77 +1,41 @@
 # Rezept-Stempel
 
-Lokales Desktop-Werkzeug für die Apotheke: Rezept-PDFs per **Drag & Drop** oder Doppelklick öffnen, mit einem Klick `- (x)g TT.MM.JJJJ` setzen, mit dem Mausrad die Menge von 5–100 g in 5er-Schritten ändern und die gestempelte Datei **direkt neben das Original** schreiben.
+Browser-App zum Stempeln von Rezept-PDFs. Ein Klick setzt `- (x)g DD.MM.YYYY` (Europe/Berlin), das Mausrad ändert die Menge, Speichern schreibt **eine neue Datei**. Das Original bleibt unangetastet.
 
-Kein Browser, kein Download-Dialog, kein Terminal im Alltag.
+Alles läuft lokal im Browser. Es gibt keinen Server-Upload.
 
-## Windows: ohne Terminal starten
+## Starten
 
-Einmal einrichten (PowerShell im Ordner `tools\rezept-stempel`):
-
-```powershell
-.\packaging\windows\build.ps1
+```bash
+cd tools/rezept-stempel/web
+npm install
+npm run dev
 ```
 
-Das erzeugt `dist\Rezept-Stempel.exe` (kein Konsolenfenster) und legt Verknüpfungen **Desktop** und **Startmenü** `Rezept-Stempel` an.
+Dann `http://127.0.0.1:43174` öffnen (Port ist fest, nicht 3000/5173/8080).
 
-Danach:
-
-1. Doppelklick auf **Rezept-Stempel** (Desktop oder Startmenü)
-2. PDFs auf das Fenster **oder** auf die Verknüpfung / EXE ziehen
-3. Stempeln, Speichern
-
-Nur Verknüpfung (falls die EXE schon da ist, oder mit `pythonw`):
-
-```powershell
-.\packaging\windows\install-shortcut.ps1
-```
-
-Ohne PowerShell: `packaging\windows\install-shortcut.vbs` doppelklicken.
-
-Ohne Build, wenn Python installiert ist: `Rezept-Stempel.pyw` doppelklicken (`pythonw`, keine Konsole).
-
-PDFs auf die Verknüpfung oder EXE legen öffnet sie direkt (Windows übergibt die Pfade als Startargumente).
-
-## Drag & Drop
-
-- Eine oder mehrere PDFs auf das Fenster ziehen — sie erscheinen unter **Offene Dateien**
-- Ordner: nur PDFs in der ersten Ebene, keine Unterordner
-- Weitere Drops fügen Dateien hinzu; Stempel je Datei getrennt
-- Speichern gilt immer für die **aktuelle** Datei und schreibt neben deren Original
+Tests: `npm test`  
+Production-Build: `npm run build` und `npm run preview`
 
 ## Bedienung
 
 | Aktion | Wirkung |
 | --- | --- |
-| **PDF öffnen** | Eine oder mehrere Dateien wählen. |
-| **Drag & Drop** | PDFs auf Fenster oder Verknüpfung. |
-| **Beispiel öffnen** | Lädt `samples/TEST-REZEPT-0001.pdf` (nur TEST-Kennungen). |
-| **Klick** | Setzt `- 25g 29.09.2026`. In den drei Rp-Zeilen rastet der Stempel ein. Weißer Untergrund, 11 pt fett. |
-| **Mausrad** | `(x)` in 5er-Schritten, 5–100 g. Der letzte Stempel wird mitgezogen. |
-| **Erste Rp-Zeile** / Enter | Standardposition: erste Verordnungszeile. |
-| **Speichern** | `Originalname_YYYY-MM-DD_HHMM.pdf` im **selben Ordner** wie die Quelle. Original unverändert. |
+| **PDF öffnen** oder Dateien auf die Seite ziehen | Eine oder mehrere PDFs. In Chrome merkt sich die App den Datei-Handle. |
+| **Beispiel öffnen** | Lädt `public/samples/TEST-REZEPT-0001.pdf` (nur TEST-Kennungen). |
+| **Klick aufs Rezept** | Setzt den Stempel. In den drei Verordnungszeilen eines A4-Kassenrezepts rastet die Position ein. |
+| **Mausrad** / **−5 / +5** | Menge 5–100 g in 5er-Schritten. Der letzte Stempel wird mitgezogen. |
+| **Erste Rp-Zeile** / Enter | Standardposition auf der ersten Verordnungszeile. |
+| **Speichern** / Strg+S | Neue Datei `Originalname_YYYY-MM-DD_HHMM.pdf`. Original nie überschreiben. |
 | **Letzten Stempel entfernen** / Strg+Z | Nimmt den letzten Overlay zurück. |
 
-Datum auf dem Stempel: `DD.MM.YYYY` in `Europe/Berlin`.  
-Dateiname: `YYYY-MM-DD_HHMM`, bei Kollision `…-2.pdf`.
+## Speichern
 
-## Entwicklung (mit Terminal)
+- **Chrome / Edge**, wenn die Datei über den Dateidialog oder per Drop mit Datei-Handle geöffnet wurde: File System Access API, `showSaveFilePicker` mit `startIn` am Original-Handle. Der Dialog landet typischerweise **neben der Quelldatei**. Vorgeschlagener Name enthält den Timestamp. Wählt man denselben Namen wie das Original, bricht die App ab.
+- **Sonst** (Firefox, Safari, Beispiel-PDF, Drop ohne Handle): Download von `Originalname_YYYY-MM-DD_HHMM.pdf`. Datei im Download-Ordner bzw. im Dialog neben dem Original ablegen — nicht die Quelle überschreiben.
 
-```bash
-cd tools/rezept-stempel
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev,desktop]"
-python -m rezept_stempel
-```
-
-```bash
-python -m rezept_stempel --open samples/TEST-REZEPT-0001.pdf
-pytest
-```
-
-Debian/Ubuntu zusätzlich: `sudo apt install python3-tk`.
+Stempeltext: `- 25g 29.09.2026` (Beispiel), 11 pt fett, weißer Untergrund.
 
 ## Musterdatei
 
-`samples/TEST-REZEPT-0001.pdf` ist ein synthetisches A4-Kassenrezept (`TEST-PATIENT-0001`, `TEST-PREPARAT`, …). Keine realen Patientendaten.
+`web/public/samples/TEST-REZEPT-0001.pdf` und `samples/TEST-REZEPT-0001.pdf` enthalten nur TEST-Kennungen. Keine realen Patientendaten.
