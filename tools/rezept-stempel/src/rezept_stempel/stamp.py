@@ -10,11 +10,13 @@ import pymupdf
 
 from rezept_stempel.dates import overlay_date_text
 from rezept_stempel.grams import clamp_grams
+from rezept_stempel.layout import (
+    STAMP_COLOR,
+    STAMP_FONT,
+    STAMP_FONTSIZE,
+    overlay_rect,
+)
 from rezept_stempel.paths import stamped_output_path
-
-STAMP_FONTSIZE = 12
-STAMP_COLOR = (0.08, 0.16, 0.38)
-STAMP_FONT = "helv"
 
 
 def stamp_text(grams: int, when: datetime | None = None) -> str:
@@ -31,6 +33,21 @@ class Overlay:
 
     def text(self) -> str:
         return stamp_text(self.grams, self.when)
+
+    def rect(self) -> pymupdf.Rect:
+        return overlay_rect(self.x, self.y, self.text())
+
+
+def draw_overlay(page: pymupdf.Page, overlay: Overlay) -> None:
+    """Weißer Untergrund plus Stempeltext — lesbar auf bedruckten Rezeptzeilen."""
+    page.draw_rect(overlay.rect(), color=None, fill=(1, 1, 1), width=0)
+    page.insert_text(
+        (overlay.x, overlay.y),
+        overlay.text(),
+        fontsize=STAMP_FONTSIZE,
+        fontname=STAMP_FONT,
+        color=STAMP_COLOR,
+    )
 
 
 def apply_overlays(source: Path, overlays: list[Overlay], dest: Path | None = None) -> Path:
@@ -52,14 +69,7 @@ def apply_overlays(source: Path, overlays: list[Overlay], dest: Path | None = No
         for overlay in overlays:
             if overlay.page_index < 0 or overlay.page_index >= doc.page_count:
                 raise IndexError(f"Seite {overlay.page_index + 1} fehlt in der PDF.")
-            page = doc[overlay.page_index]
-            page.insert_text(
-                (overlay.x, overlay.y),
-                overlay.text(),
-                fontsize=STAMP_FONTSIZE,
-                fontname=STAMP_FONT,
-                color=STAMP_COLOR,
-            )
+            draw_overlay(doc[overlay.page_index], overlay)
         doc.save(dest, deflate=True, garbage=3)
     finally:
         doc.close()

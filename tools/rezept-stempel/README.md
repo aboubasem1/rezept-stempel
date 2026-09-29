@@ -34,8 +34,9 @@ python -m rezept_stempel --open samples/TEST-REZEPT-0001.pdf
 | --- | --- |
 | **PDF öffnen** | Wählt das Rezept. |
 | **Beispiel öffnen** | Lädt `samples/TEST-REZEPT-0001.pdf` (nur TEST-Kennungen). |
-| **Klick** | Setzt den Text `- 25g 29.09.2026` (Menge und Berlin-Datum). |
+| **Klick** | Setzt `- 25g 29.09.2026` (Menge und Berlin-Datum). In den drei Rp-Zeilen rastet der Stempel ein. Weißer Untergrund, 11 pt fett. |
 | **Mausrad** | Ändert `(x)` in 5er-Schritten, 5–100 g. Der zuletzt gesetzte Stempel wird mitgezogen. |
+| **Erste Rp-Zeile** / Enter | Standardposition: erste Verordnungszeile, nach dem Präparatenamen. |
 | **Speichern** | Schreibt `Originalname_YYYY-MM-DD_HHMM.pdf` in denselben Ordner wie die Quelle. Das Original bleibt unverändert. |
 | **Letzten Stempel entfernen** / Strg+Z | Nimmt den letzten Overlay zurück. |
 
@@ -44,7 +45,7 @@ Dateiname: `YYYY-MM-DD_HHMM`, bei Kollision `…-2.pdf`.
 
 ## Musterdatei
 
-`samples/TEST-REZEPT-0001.pdf` ist ein synthetisches Kassenrezept (`TEST-PATIENT-0001`, `TEST-PREPARAT`, …). Keine realen Patientendaten.
+`samples/TEST-REZEPT-0001.pdf` ist ein synthetisches A4-Kassenrezept (`TEST-PATIENT-0001`, `TEST-PREPARAT`, …). Keine realen Patientendaten.
 
 Neu erzeugen:
 

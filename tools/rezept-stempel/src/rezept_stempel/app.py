@@ -12,10 +12,15 @@ import pymupdf
 
 from rezept_stempel.dates import now_berlin
 from rezept_stempel.grams import DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, STEP_GRAMS, step_grams
+from rezept_stempel.layout import (
+    STAMP_COLOR,
+    canvas_font_size,
+    click_to_baseline,
+    default_stamp_point,
+)
 from rezept_stempel.sample_pdf import default_sample_path
 from rezept_stempel.stamp import Overlay, apply_overlays, stamp_text
 
-NAVY = "#142848"
 PAPER = "#f6f2ea"
 INK = "#1c1c1c"
 MUTED = "#5a5a5a"
@@ -32,7 +37,7 @@ class RezeptStempelApp(tk.Tk):
         self.source_path: Path | None = None
         self.doc: pymupdf.Document | None = None
         self.page_index = 0
-        self.zoom = 1.25
+        self.zoom = 1.5
         self.grams = DEFAULT_GRAMS
         self.overlays: list[Overlay] = []
         self._page_image: tk.PhotoImage | None = None
@@ -63,6 +68,7 @@ class RezeptStempelApp(tk.Tk):
         ttk.Button(toolbar, text="PDF öffnen", command=self.open_pdf, style="Accent.TButton").pack(side="left")
         ttk.Button(toolbar, text="Beispiel öffnen", command=self.open_sample).pack(side="left", padx=(8, 0))
         ttk.Button(toolbar, text="Speichern", command=self.save_pdf).pack(side="left", padx=(8, 0))
+        ttk.Button(toolbar, text="Erste Rp-Zeile", command=self.place_default).pack(side="left", padx=(8, 0))
         ttk.Button(toolbar, text="Letzten Stempel entfernen", command=self.undo_last).pack(side="left", padx=(8, 0))
 
         self.page_label = ttk.Label(toolbar, text="Seite —")
@@ -78,9 +84,9 @@ class RezeptStempelApp(tk.Tk):
             meta,
             style="Hint.TLabel",
             text=(
-                f"Ein Klick setzt den Stempel. Mausrad ändert die Menge "
-                f"({MIN_GRAMS}–{MAX_GRAMS} g, Schritte von {STEP_GRAMS}). "
-                "Speichern schreibt eine neue Datei in denselben Ordner wie das Original."
+                f"Klick setzt den Stempel (auf Rp-Zeilen einrastend). "
+                f"Mausrad: Menge {MIN_GRAMS}–{MAX_GRAMS} g in {STEP_GRAMS}er-Schritten. "
+                "„Erste Rp-Zeile“ setzt die Standardposition. Speichern schreibt neben das Original."
             ),
         ).pack(anchor="w", pady=(4, 0))
         self._refresh_stamp_label()
@@ -115,6 +121,7 @@ class RezeptStempelApp(tk.Tk):
         self.bind("<Control-o>", lambda _e: self.open_pdf())
         self.bind("<Control-s>", lambda _e: self.save_pdf())
         self.bind("<Control-z>", lambda _e: self.undo_last())
+        self.bind("<Return>", lambda _e: self.place_default())
         self.bind("<Prior>", lambda _e: self.prev_page())
         self.bind("<Next>", lambda _e: self.next_page())
         self.bind_all("<MouseWheel>", self._on_mousewheel)
@@ -176,7 +183,9 @@ class RezeptStempelApp(tk.Tk):
         self.overlays = []
         self._ghost = None
         self._render_page()
-        self._set_status(f"Geöffnet: {path}  —  Klick setzt den Stempel, Speichern schreibt daneben.")
+        self._set_status(
+            f"Geöffnet: {path}  —  Klick oder „Erste Rp-Zeile“ setzt den Stempel, Speichern schreibt daneben."
+        )
 
     def _close_doc(self) -> None:
         if self.doc is not None:
@@ -223,7 +232,8 @@ class RezeptStempelApp(tk.Tk):
             self.open_pdf()
             return
         cx, cy = self._canvas_point(event)
-        x, y = self._pdf_point(cx, cy)
+        pdf_x, pdf_y = self._pdf_point(cx, cy)
+        x, y = click_to_baseline(pdf_x, pdf_y)
         self.overlays.append(
             Overlay(
                 page_index=self.page_index,
@@ -234,7 +244,9 @@ class RezeptStempelApp(tk.Tk):
             )
         )
         self._redraw_overlays()
-        self._set_status(f"Stempel gesetzt: {stamp_text(self.grams)}  —  Mausrad ändert die Menge, Speichern schreibt die Datei.")
+        self._set_status(
+            f"Stempel gesetzt: {stamp_text(self.grams)}  —  Mausrad ändert die Menge, Speichern schreibt die Datei."
+        )
 
     def _on_motion(self, event: tk.Event) -> None:
         if self.doc is None:
@@ -246,33 +258,84 @@ class RezeptStempelApp(tk.Tk):
         self._ghost = None
         self._redraw_overlays()
 
+    def _hex_stamp_color(self) -> str:
+        r, g, b = STAMP_COLOR
+        return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+
+    def _draw_stamp_visual(self, overlay: Overlay, fill: str) -> None:
+        z = self.zoom
+        rect = overlay.rect()
+        self.canvas.create_rectangle(
+            rect.x0 * z,
+            rect.y0 * z,
+            rect.x1 * z,
+            rect.y1 * z,
+            fill="white",
+            outline="",
+            tags=("stamp",),
+        )
+        self.canvas.create_text(
+            overlay.x * z,
+            overlay.y * z,
+            text=overlay.text(),
+            fill=fill,
+            font=("Helvetica", canvas_font_size(z), "bold"),
+            anchor="sw",
+            tags=("stamp",),
+        )
+
     def _redraw_overlays(self) -> None:
         self.canvas.delete("stamp")
         if self.doc is None:
             return
+        ink = self._hex_stamp_color()
         for overlay in self.overlays:
             if overlay.page_index != self.page_index:
                 continue
-            self.canvas.create_text(
-                overlay.x * self.zoom,
-                overlay.y * self.zoom,
-                text=overlay.text(),
-                fill=NAVY,
-                font=("Helvetica", 12, "bold"),
-                anchor="sw",
-                tags=("stamp",),
-            )
+            self._draw_stamp_visual(overlay, ink)
         if self._ghost is not None:
             gx, gy = self._ghost
-            self.canvas.create_text(
-                gx,
-                gy,
-                text=stamp_text(self.grams),
-                fill="#6b7280",
-                font=("Helvetica", 12, "bold"),
-                anchor="sw",
-                tags=("stamp",),
+            pdf_x, pdf_y = self._pdf_point(gx, gy)
+            x, y = click_to_baseline(pdf_x, pdf_y)
+            ghost = Overlay(
+                page_index=self.page_index,
+                x=x,
+                y=y,
+                grams=self.grams,
+                when=now_berlin(),
             )
+            self._draw_stamp_visual(ghost, "#6b7280")
+        elif not any(item.page_index == self.page_index for item in self.overlays):
+            x, y = default_stamp_point()
+            hint = Overlay(
+                page_index=self.page_index,
+                x=x,
+                y=y,
+                grams=self.grams,
+                when=now_berlin(),
+            )
+            self._draw_stamp_visual(hint, "#9aa3af")
+
+    def place_default(self) -> None:
+        if self.doc is None:
+            self.open_pdf()
+            return
+        x, y = default_stamp_point()
+        overlay = Overlay(
+            page_index=self.page_index,
+            x=x,
+            y=y,
+            grams=self.grams,
+            when=now_berlin(),
+        )
+        if self.overlays and self.overlays[-1].page_index == self.page_index:
+            self.overlays[-1] = overlay
+        else:
+            self.overlays.append(overlay)
+        self._redraw_overlays()
+        self._set_status(
+            f"Stempel auf der ersten Rp-Zeile: {overlay.text()}  —  Klick verschiebt nicht, setzt zusätzlich."
+        )
 
     def undo_last(self) -> None:
         if not self.overlays:
