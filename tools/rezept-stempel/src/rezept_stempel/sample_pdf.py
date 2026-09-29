@@ -35,7 +35,7 @@ SAMPLE_LINES = (
     "Arzt                  TEST-ARZT-0001",
     "Betriebsstätten-Nr.   TEST-BSNR-0001",
     "LANR                  TEST-LANR-0001",
-    "Austellungsdatum      01.01.2026 (Testdatum)",
+    "Ausstellungsdatum     01.01.2026 (Testdatum)",
 )
 
 
