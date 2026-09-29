@@ -15,6 +15,7 @@ export const DEFAULT_STAMP_X = 198.0
 export const DEFAULT_STAMP_Y = RX_ROW_TOPS[0] + 12.0
 
 export type Overlay = {
+  id: string
   pageIndex: number
   x: number
   y: number

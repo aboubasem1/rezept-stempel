@@ -13,6 +13,7 @@ describe('stamp overlay', () => {
     const bytes = await src.save()
     const stamped = await applyOverlays(bytes, [
       {
+        id: 'a',
         pageIndex: 0,
         x: DEFAULT_STAMP_X,
         y: DEFAULT_STAMP_Y,

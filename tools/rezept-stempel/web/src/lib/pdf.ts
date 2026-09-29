@@ -56,11 +56,19 @@ export function drawStamps(
   pageIndex: number,
   grams: number,
   ghost: { x: number; y: number } | null,
+  selectedId: string | null = null,
 ): void {
   ctx.save()
   for (const overlay of overlays) {
     if (overlay.pageIndex !== pageIndex) continue
-    paintStamp(ctx, scale, overlay.x, overlay.y, stampText(overlay.grams, overlay.when), '#0d245c')
+    paintStamp(
+      ctx,
+      scale,
+      overlay.x,
+      overlay.y,
+      stampText(overlay.grams, overlay.when),
+      overlay.id === selectedId ? '#0a1a4a' : '#0d245c',
+    )
   }
   if (ghost) {
     paintStamp(ctx, scale, ghost.x, ghost.y, stampText(grams), '#6b7280')
@@ -90,14 +98,25 @@ function paintStamp(
   ctx.fillText(text, x * scale, y * scale)
 }
 
-export function canvasClickToPdf(
+export function canvasToPdf(
   event: { clientX: number; clientY: number },
   canvas: HTMLCanvasElement,
   pdfWidth: number,
   pdfHeight: number,
 ): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect()
-  const x = ((event.clientX - rect.left) / rect.width) * pdfWidth
-  const y = ((event.clientY - rect.top) / rect.height) * pdfHeight
-  return clickToBaseline(x, y)
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * pdfWidth,
+    y: ((event.clientY - rect.top) / rect.height) * pdfHeight,
+  }
+}
+
+export function canvasClickToPdf(
+  event: { clientX: number; clientY: number },
+  canvas: HTMLCanvasElement,
+  pdfWidth: number,
+  pdfHeight: number,
+): { x: number; y: number } {
+  const point = canvasToPdf(event, canvas, pdfWidth, pdfHeight)
+  return clickToBaseline(point.x, point.y)
 }

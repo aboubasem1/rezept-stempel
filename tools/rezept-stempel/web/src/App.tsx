@@ -10,7 +10,8 @@ import {
 import { stampText } from './lib/dates'
 import { DEFAULT_GRAMS, stepGrams } from './lib/grams'
 import { defaultStampPoint, type Overlay } from './lib/layout'
-import { canvasClickToPdf, drawStamps, loadPdf, renderPageToCanvas } from './lib/pdf'
+import { createOverlay, hitTestOverlay, updateSelectedGrams } from './lib/overlays'
+import { canvasClickToPdf, canvasToPdf, drawStamps, loadPdf, renderPageToCanvas } from './lib/pdf'
 import { describeSave, saveStampedPdf } from './lib/save'
 import { applyOverlays } from './lib/stamp'
 import './App.css'
@@ -29,6 +30,7 @@ export default function App() {
   const [docs, setDocs] = useState<OpenDoc[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [grams, setGrams] = useState(DEFAULT_GRAMS)
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null)
   const [status, setStatus] = useState('PDFs hierher ziehen oder öffnen.')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -41,10 +43,12 @@ export default function App() {
   const gramsRef = useRef(grams)
   const docsRef = useRef(docs)
   const activeIdRef = useRef(activeId)
+  const selectedOverlayIdRef = useRef(selectedOverlayId)
 
   gramsRef.current = grams
   docsRef.current = docs
   activeIdRef.current = activeId
+  selectedOverlayIdRef.current = selectedOverlayId
 
   const active = docs.find((doc) => doc.id === activeId) ?? null
 
@@ -59,7 +63,15 @@ export default function App() {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     if (!doc) return
     const { scale } = scaleRef.current
-    drawStamps(ctx, scale, doc.overlays, doc.pageIndex, gramsRef.current, ghostRef.current)
+    drawStamps(
+      ctx,
+      scale,
+      doc.overlays,
+      doc.pageIndex,
+      gramsRef.current,
+      ghostRef.current,
+      selectedOverlayIdRef.current,
+    )
   }, [])
 
   useEffect(() => {
@@ -103,7 +115,7 @@ export default function App() {
 
   useEffect(() => {
     redrawStamps(active)
-  }, [active, redrawStamps, grams])
+  }, [active, redrawStamps, grams, selectedOverlayId])
 
   const addFiles = useCallback(async (files: Array<{ file: File; handle: FileSystemFileHandle | null }>) => {
     const pdfs = files.filter((item) => item.file.name.toLowerCase().endsWith('.pdf'))
@@ -137,6 +149,7 @@ export default function App() {
     if (opened.length === 0) return
     setDocs((current) => [...current, ...opened])
     setActiveId(opened[0].id)
+    setSelectedOverlayId(null)
     setStatus(
       opened.length === 1
         ? `Geöffnet: ${opened[0].name} — Klick setzt den Stempel.`
@@ -220,15 +233,16 @@ export default function App() {
       void openPicker()
       return
     }
-    const overlay: Overlay = {
+    const overlay = createOverlay({
       pageIndex: current.pageIndex,
       x,
       y,
       grams: gramsRef.current,
       when: new Date(),
-    }
-    patchDoc(current.id, { overlays: [...current.overlays, overlay] })
-    setStatus(`Stempel gesetzt: ${stampText(gramsRef.current)} — Mausrad ändert die Menge.`)
+    })
+    patchDoc(current.id, (doc) => ({ ...doc, overlays: [...doc.overlays, overlay] }))
+    setSelectedOverlayId(overlay.id)
+    setStatus(`Stempel gesetzt: ${stampText(overlay.grams)} — Mausrad ändert nur diesen Stempel.`)
   }
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
@@ -239,6 +253,14 @@ export default function App() {
       return
     }
     const { width, height } = scaleRef.current
+    const raw = canvasToPdf(event, canvas, width, height)
+    const existing = hitTestOverlay(current.overlays, current.pageIndex, raw.x, raw.y)
+    if (existing) {
+      setSelectedOverlayId(existing.id)
+      setGrams(existing.grams)
+      setStatus(`Stempel gewählt: ${stampText(existing.grams, existing.when)}`)
+      return
+    }
     const point = canvasClickToPdf(event, canvas, width, height)
     placeStamp(point.x, point.y)
   }
@@ -248,18 +270,24 @@ export default function App() {
     const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
     if (!canvas || !current) return
     const { width, height } = scaleRef.current
-    ghostRef.current = canvasClickToPdf(event, canvas, width, height)
+    const raw = canvasToPdf(event, canvas, width, height)
+    if (hitTestOverlay(current.overlays, current.pageIndex, raw.x, raw.y)) {
+      ghostRef.current = null
+    } else {
+      ghostRef.current = canvasClickToPdf(event, canvas, width, height)
+    }
     redrawStamps(current)
   }
 
   const applyGrams = (next: number) => {
     setGrams(next)
+    const selectedId = selectedOverlayIdRef.current
     const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
-    if (!current || current.overlays.length === 0) return
-    const overlays = [...current.overlays]
-    const last = overlays[overlays.length - 1]
-    overlays[overlays.length - 1] = { ...last, grams: next, when: new Date() }
-    patchDoc(current.id, { overlays })
+    if (!current || selectedId === null) return
+    patchDoc(current.id, (doc) => ({
+      ...doc,
+      overlays: updateSelectedGrams(doc.overlays, selectedId, next),
+    }))
   }
 
   const placeDefault = () => {
@@ -269,21 +297,16 @@ export default function App() {
       return
     }
     const point = defaultStampPoint()
-    const overlay: Overlay = {
+    const overlay = createOverlay({
       pageIndex: current.pageIndex,
       x: point.x,
       y: point.y,
       grams: gramsRef.current,
       when: new Date(),
-    }
-    const overlays = [...current.overlays]
-    if (overlays.length > 0 && overlays[overlays.length - 1].pageIndex === current.pageIndex) {
-      overlays[overlays.length - 1] = overlay
-    } else {
-      overlays.push(overlay)
-    }
-    patchDoc(current.id, { overlays })
-    setStatus(`Stempel auf der ersten Rp-Zeile: ${stampText(gramsRef.current)}`)
+    })
+    patchDoc(current.id, (doc) => ({ ...doc, overlays: [...doc.overlays, overlay] }))
+    setSelectedOverlayId(overlay.id)
+    setStatus(`Stempel auf der ersten Rp-Zeile: ${stampText(overlay.grams)}`)
   }
 
   const undo = () => {
@@ -292,7 +315,13 @@ export default function App() {
       setStatus('Kein Stempel zum Entfernen.')
       return
     }
-    patchDoc(current.id, { overlays: current.overlays.slice(0, -1) })
+    const removed = current.overlays[current.overlays.length - 1]
+    patchDoc(current.id, (doc) => ({ ...doc, overlays: doc.overlays.slice(0, -1) }))
+    if (selectedOverlayIdRef.current === removed.id) {
+      const previous = current.overlays[current.overlays.length - 2]
+      setSelectedOverlayId(previous?.id ?? null)
+      if (previous) setGrams(previous.grams)
+    }
     setStatus('Letzten Stempel entfernt.')
   }
 
@@ -443,7 +472,10 @@ export default function App() {
                   <button
                     type="button"
                     className={doc.id === activeId ? 'file is-active' : 'file'}
-                    onClick={() => setActiveId(doc.id)}
+                    onClick={() => {
+                      setActiveId(doc.id)
+                      setSelectedOverlayId(null)
+                    }}
                   >
                     {doc.name}
                     {doc.overlays.length > 0 ? ` · ${doc.overlays.length}` : ''}
