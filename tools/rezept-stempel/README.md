@@ -18,4 +18,5 @@ npm test
 
 GitHub → Vercel auto-deploy. `main` ist Production, andere Branches sind Previews.
 
-Vercel-Projekt: Root Directory `tools/rezept-stempel/web`, Framework Vite, Output `dist`. Keine Env-Vars, keine Serverless Functions.
+- Repo: https://github.com/aboubasem1/rezept-stempel
+- Vercel-Projekt: Root Directory `tools/rezept-stempel/web`, Framework Vite, Output `dist`. Keine Env-Vars, keine Serverless Functions.
