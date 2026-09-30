@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { clampGrams, DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, STEP_GRAMS, stepGrams } from './grams'
+import {
+  clampCustomGrams,
+  clampGrams,
+  DEFAULT_GRAMS,
+  MAX_GRAMS,
+  MIN_GRAMS,
+  parseCustomGrams,
+  STEP_GRAMS,
+  stepGrams,
+} from './grams'
 
 describe('grams', () => {
   it('starts at 25 and stays on the 5 g ladder', () => {
@@ -17,5 +26,13 @@ describe('grams', () => {
     expect(stepGrams(MIN_GRAMS, -1)).toBe(MIN_GRAMS)
     expect(stepGrams(MAX_GRAMS, 1)).toBe(MAX_GRAMS)
     expect(STEP_GRAMS).toBe(5)
+  })
+
+  it('keeps custom amounts off the 5 g ladder', () => {
+    expect(clampCustomGrams(17)).toBe(17)
+    expect(clampCustomGrams(17)).not.toBe(clampGrams(17))
+    expect(parseCustomGrams('17,4')).toBe(17)
+    expect(clampCustomGrams(3)).toBe(MIN_GRAMS)
+    expect(clampCustomGrams(140)).toBe(MAX_GRAMS)
   })
 })

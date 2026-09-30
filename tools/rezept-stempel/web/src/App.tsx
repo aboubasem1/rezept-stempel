@@ -5,10 +5,12 @@ import {
   useState,
   type DragEvent,
   type MouseEvent,
+  type PointerEvent,
 } from 'react'
 
 import { stampText } from './lib/dates'
-import { DEFAULT_GRAMS, stepGrams } from './lib/grams'
+import { DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, parseCustomGrams, stepGrams } from './lib/grams'
+import { CUSTOM_HOLD_MS } from './lib/hold'
 import { defaultStampPoint, type Overlay } from './lib/layout'
 import { createOverlay, hitTestOverlay, updateSelectedGrams } from './lib/overlays'
 import { canvasClickToPdf, canvasToPdf, drawStamps, loadPdf, renderPageToCanvas } from './lib/pdf'
@@ -35,6 +37,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
+  const [customDraft, setCustomDraft] = useState('25')
+  const [customError, setCustomError] = useState<string | null>(null)
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const stampCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const stageRef = useRef<HTMLElement | null>(null)
@@ -44,6 +49,8 @@ export default function App() {
   const docsRef = useRef(docs)
   const activeIdRef = useRef(activeId)
   const selectedOverlayIdRef = useRef(selectedOverlayId)
+  const holdTimerRef = useRef<number | null>(null)
+  const customInputRef = useRef<HTMLInputElement | null>(null)
 
   gramsRef.current = grams
   docsRef.current = docs
@@ -290,6 +297,71 @@ export default function App() {
     }))
   }
 
+  const clearHold = () => {
+    if (holdTimerRef.current === null) return
+    window.clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = null
+  }
+
+  const openCustomGrams = () => {
+    if (selectedOverlayIdRef.current === null) {
+      setStatus('Bitte zuerst einen Stempel wählen.')
+      return
+    }
+    setCustomDraft(String(gramsRef.current))
+    setCustomError(null)
+    setCustomOpen(true)
+    setStatus('Freie Menge für den ausgewählten Stempel.')
+  }
+
+  const closeCustomGrams = () => {
+    setCustomOpen(false)
+    setCustomError(null)
+  }
+
+  const submitCustomGrams = () => {
+    const parsed = parseCustomGrams(customDraft)
+    if (parsed === null) {
+      setCustomError(`Bitte eine Menge zwischen ${MIN_GRAMS} und ${MAX_GRAMS} g eingeben.`)
+      return
+    }
+    applyGrams(parsed)
+    closeCustomGrams()
+    setStatus(`Freie Menge gesetzt: ${stampText(parsed)}`)
+  }
+
+  const onCanvasContextMenu = (event: MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault()
+  }
+
+  const onCanvasPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    const canvas = stampCanvasRef.current
+    const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
+    if (!canvas || !current) return
+    const { width, height } = scaleRef.current
+    const raw = canvasToPdf(event, canvas, width, height)
+    const existing = hitTestOverlay(current.overlays, current.pageIndex, raw.x, raw.y)
+    if (existing) {
+      selectedOverlayIdRef.current = existing.id
+      gramsRef.current = existing.grams
+      setSelectedOverlayId(existing.id)
+      setGrams(existing.grams)
+    }
+    clearHold()
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null
+      openCustomGrams()
+    }, CUSTOM_HOLD_MS)
+  }
+
+  const onCanvasPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (event.button === 2) {
+      clearHold()
+    }
+  }
+
   const placeDefault = () => {
     const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
     if (!current) {
@@ -382,6 +454,12 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  useEffect(() => {
+    if (!customOpen) return
+    customInputRef.current?.focus()
+    customInputRef.current?.select()
+  }, [customOpen])
 
   useEffect(() => {
     const stage = stageRef.current
@@ -493,14 +571,19 @@ export default function App() {
               <span>oder öffnen. Speichern schreibt eine neue Datei.</span>
             </button>
           ) : (
-            <div className="page-wrap">
+            <div className="page-wrap" onContextMenu={(event) => event.preventDefault()}>
               <canvas ref={pageCanvasRef} className="pdf-page" />
               <canvas
                 ref={stampCanvasRef}
                 className="pdf-stamps"
                 onClick={onCanvasClick}
                 onMouseMove={onCanvasMove}
+                onContextMenu={onCanvasContextMenu}
+                onPointerDown={onCanvasPointerDown}
+                onPointerUp={onCanvasPointerUp}
+                onPointerCancel={clearHold}
                 onMouseLeave={() => {
+                  clearHold()
                   ghostRef.current = null
                   redrawStamps(active)
                 }}
@@ -517,6 +600,62 @@ export default function App() {
       ) : null}
       {busy ? <p className="banner muted">Bitte warten …</p> : null}
       <footer className="status">{status}</footer>
+      {customOpen ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeCustomGrams()
+          }}
+        >
+          <form
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="custom-grams-title"
+            onSubmit={(event) => {
+              event.preventDefault()
+              submitCustomGrams()
+            }}
+          >
+            <h2 id="custom-grams-title">Freie Menge</h2>
+            <p>Nur der ausgewählte Stempel. Beliebige ganze Zahl, nicht auf 5er-Schritte gerundet.</p>
+            <label htmlFor="custom-grams-input">
+              Gramm ({MIN_GRAMS}–{MAX_GRAMS})
+            </label>
+            <input
+              ref={customInputRef}
+              id="custom-grams-input"
+              type="text"
+              inputMode="decimal"
+              value={customDraft}
+              onChange={(event) => {
+                setCustomDraft(event.target.value)
+                setCustomError(null)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  closeCustomGrams()
+                }
+              }}
+            />
+            {customError ? (
+              <p className="dialog-error" role="alert">
+                {customError}
+              </p>
+            ) : null}
+            <div className="dialog-actions">
+              <button type="button" onClick={closeCustomGrams}>
+                Abbrechen
+              </button>
+              <button type="submit" className="primary">
+                Übernehmen
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   )
 }

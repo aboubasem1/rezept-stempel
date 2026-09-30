@@ -1,6 +1,6 @@
 # Rezept-Stempel
 
-Stempelt Rezept-PDFs im Browser: `- (x)g DD.MM.YYYY` (Europe/Berlin). Mausrad ändert die Menge (5–100 g, 5er-Schritte) **nur am ausgewählten Stempel**. Klicks in den Verordnungszeilen rasten ein. Speichern schreibt `Originalname_YYYY-MM-DD_HHMM.pdf` — das Original bleibt.
+Stempelt Rezept-PDFs im Browser: `- (x)g DD.MM.YYYY` (Europe/Berlin). Mausrad ändert die Menge (5–100 g, 5er-Schritte) **nur am ausgewählten Stempel**. Rechte Maustaste länger als 1 s: freie Menge ohne 5er-Rundung. Klicks in den Verordnungszeilen rasten ein. Speichern schreibt `Originalname_YYYY-MM-DD_HHMM.pdf` — das Original bleibt.
 
 PDFs bleiben im Browser. Nichts wird hochgeladen.
 
