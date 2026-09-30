@@ -75,7 +75,7 @@ function downloadBlob(blob: Blob, name: string): void {
   link.href = url
   link.download = name
   link.click()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
 
 function isAbort(error: unknown): boolean {

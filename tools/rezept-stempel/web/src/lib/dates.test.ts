@@ -15,5 +15,6 @@ describe('dates', () => {
     const name = stampedFileName('TEST-REZEPT-0001.pdf', noonUtc)
     expect(name).toBe('TEST-REZEPT-0001_2026-09-29_1400.pdf')
     expect(name.toLowerCase()).not.toBe('TEST-REZEPT-0001.pdf'.toLowerCase())
+    expect(name).not.toBe('TEST-REZEPT-0001.pdf')
   })
 })

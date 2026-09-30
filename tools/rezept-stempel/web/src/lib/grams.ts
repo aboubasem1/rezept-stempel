@@ -17,7 +17,7 @@ export function clampCustomGrams(value: number): number {
 }
 
 export function parseCustomGrams(raw: string): number | null {
-  const normalized = raw.trim().replace(',', '.')
+  const normalized = raw.trim().replace(',', '.').replace(/\s*g$/i, '')
   if (normalized === '') {
     return null
   }

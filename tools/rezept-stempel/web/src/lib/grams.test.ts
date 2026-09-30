@@ -32,6 +32,8 @@ describe('grams', () => {
     expect(clampCustomGrams(17)).toBe(17)
     expect(clampCustomGrams(17)).not.toBe(clampGrams(17))
     expect(parseCustomGrams('17,4')).toBe(17)
+    expect(parseCustomGrams('17 g')).toBe(17)
+    expect(parseCustomGrams('17g')).toBe(17)
     expect(clampCustomGrams(3)).toBe(MIN_GRAMS)
     expect(clampCustomGrams(140)).toBe(MAX_GRAMS)
   })

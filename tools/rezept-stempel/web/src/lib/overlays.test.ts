@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_STAMP_X, DEFAULT_STAMP_Y, RX_ROW_TOPS } from './layout'
-import { createOverlay, hitTestOverlay, updateSelectedGrams } from './overlays'
+import { createOverlay, hitTestOverlay, stepSelectedOverlayGrams, updateSelectedGrams } from './overlays'
 
 const when = new Date('2026-09-29T12:00:00Z')
 
@@ -35,6 +35,14 @@ describe('per-stamp grams', () => {
     const next = updateSelectedGrams(overlays, 'c', 100, when)
     expect(next.filter((item) => item.grams === 25).map((item) => item.id)).toEqual(['a', 'b'])
     expect(next.find((item) => item.id === 'c')?.grams).toBe(100)
+  })
+
+  it('wheels only the selected stamp from a custom 17g value', () => {
+    const a = stamp('a', 25)
+    const b = stamp('b', 17)
+    const next = stepSelectedOverlayGrams([a, b], 'b', 1, when)
+    expect(next.find((item) => item.id === 'a')?.grams).toBe(25)
+    expect(next.find((item) => item.id === 'b')?.grams).toBe(20)
   })
 })
 

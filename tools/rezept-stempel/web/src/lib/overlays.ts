@@ -1,4 +1,5 @@
 import { stampText } from './dates'
+import { stepGrams } from './grams'
 import { overlayRect, STAMP_FONTSIZE, type Overlay } from './layout'
 
 export function createOverlay(input: Omit<Overlay, 'id'> & { id?: string }): Overlay {
@@ -26,8 +27,21 @@ export function updateSelectedGrams(
   )
 }
 
+export function stepSelectedOverlayGrams(
+  overlays: Overlay[],
+  selectedId: string | null,
+  direction: number,
+  when: Date = new Date(),
+): Overlay[] {
+  const selected = overlays.find((overlay) => overlay.id === selectedId)
+  if (!selected || selectedId === null) {
+    return overlays
+  }
+  return updateSelectedGrams(overlays, selectedId, stepGrams(selected.grams, direction), when)
+}
+
 export function estimateStampWidth(text: string): number {
-  return text.length * STAMP_FONTSIZE * 0.52
+  return text.length * STAMP_FONTSIZE * 0.62
 }
 
 export function hitTestOverlay(

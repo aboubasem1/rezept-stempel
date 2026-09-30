@@ -12,7 +12,7 @@ import { stampText } from './lib/dates'
 import { DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, parseCustomGrams, stepGrams } from './lib/grams'
 import { CUSTOM_HOLD_MS } from './lib/hold'
 import { defaultStampPoint, type Overlay } from './lib/layout'
-import { createOverlay, hitTestOverlay, updateSelectedGrams } from './lib/overlays'
+import { createOverlay, hitTestOverlay, stepSelectedOverlayGrams, updateSelectedGrams } from './lib/overlays'
 import { canvasClickToPdf, canvasToPdf, drawStamps, loadPdf, renderPageToCanvas } from './lib/pdf'
 import { describeSave, saveStampedPdf } from './lib/save'
 import { applyOverlays } from './lib/stamp'
@@ -51,11 +51,14 @@ export default function App() {
   const selectedOverlayIdRef = useRef(selectedOverlayId)
   const holdTimerRef = useRef<number | null>(null)
   const customInputRef = useRef<HTMLInputElement | null>(null)
+  const customOpenRef = useRef(false)
+  const blockContextRef = useRef(false)
 
   gramsRef.current = grams
   docsRef.current = docs
   activeIdRef.current = activeId
   selectedOverlayIdRef.current = selectedOverlayId
+  customOpenRef.current = customOpen
 
   const active = docs.find((doc) => doc.id === activeId) ?? null
 
@@ -253,6 +256,7 @@ export default function App() {
   }
 
   const onCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0) return
     const canvas = stampCanvasRef.current ?? pageCanvasRef.current
     const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
     if (!canvas || !current) {
@@ -286,14 +290,38 @@ export default function App() {
     redrawStamps(current)
   }
 
+  const selectedOverlay = () => {
+    const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
+    const selectedId = selectedOverlayIdRef.current
+    if (!current || selectedId === null) return null
+    return current.overlays.find((overlay) => overlay.id === selectedId) ?? null
+  }
+
   const applyGrams = (next: number) => {
     setGrams(next)
     const selectedId = selectedOverlayIdRef.current
     const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
     if (!current || selectedId === null) return
+    if (!current.overlays.some((overlay) => overlay.id === selectedId)) return
     patchDoc(current.id, (doc) => ({
       ...doc,
       overlays: updateSelectedGrams(doc.overlays, selectedId, next),
+    }))
+  }
+
+  const stepSelectedGrams = (direction: number) => {
+    const selected = selectedOverlay()
+    if (selected === null) {
+      setGrams(stepGrams(gramsRef.current, direction))
+      return
+    }
+    const current = docsRef.current.find((doc) => doc.id === activeIdRef.current)
+    if (!current) return
+    const nextGrams = stepGrams(selected.grams, direction)
+    setGrams(nextGrams)
+    patchDoc(current.id, (doc) => ({
+      ...doc,
+      overlays: stepSelectedOverlayGrams(doc.overlays, selected.id, direction),
     }))
   }
 
@@ -304,11 +332,12 @@ export default function App() {
   }
 
   const openCustomGrams = () => {
-    if (selectedOverlayIdRef.current === null) {
+    const selected = selectedOverlay()
+    if (selected === null) {
       setStatus('Bitte zuerst einen Stempel wählen.')
       return
     }
-    setCustomDraft(String(gramsRef.current))
+    setCustomDraft(String(selected.grams))
     setCustomError(null)
     setCustomOpen(true)
     setStatus('Freie Menge für den ausgewählten Stempel.')
@@ -317,9 +346,14 @@ export default function App() {
   const closeCustomGrams = () => {
     setCustomOpen(false)
     setCustomError(null)
+    blockContextRef.current = false
   }
 
   const submitCustomGrams = () => {
+    if (selectedOverlay() === null) {
+      setCustomError('Kein Stempel ausgewählt.')
+      return
+    }
     const parsed = parseCustomGrams(customDraft)
     if (parsed === null) {
       setCustomError(`Bitte eine Menge zwischen ${MIN_GRAMS} und ${MAX_GRAMS} g eingeben.`)
@@ -349,6 +383,7 @@ export default function App() {
       setSelectedOverlayId(existing.id)
       setGrams(existing.grams)
     }
+    blockContextRef.current = true
     clearHold()
     holdTimerRef.current = window.setTimeout(() => {
       holdTimerRef.current = null
@@ -359,6 +394,9 @@ export default function App() {
   const onCanvasPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button === 2) {
       clearHold()
+      window.setTimeout(() => {
+        if (!customOpenRef.current) blockContextRef.current = false
+      }, 0)
     }
   }
 
@@ -427,14 +465,15 @@ export default function App() {
   const saveRef = useRef(save)
   const undoRef = useRef(undo)
   const placeDefaultRef = useRef(placeDefault)
-  const applyGramsRef = useRef(applyGrams)
+  const stepSelectedGramsRef = useRef(stepSelectedGrams)
   saveRef.current = save
   undoRef.current = undo
   placeDefaultRef.current = placeDefault
-  applyGramsRef.current = applyGrams
+  stepSelectedGramsRef.current = stepSelectedGrams
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (customOpenRef.current) return
       const target = event.target
       const onField =
         target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
@@ -462,11 +501,33 @@ export default function App() {
   }, [customOpen])
 
   useEffect(() => {
+    const onMenu = (event: Event) => {
+      if (blockContextRef.current || customOpenRef.current) {
+        event.preventDefault()
+      }
+    }
+    document.addEventListener('contextmenu', onMenu)
+    return () => document.removeEventListener('contextmenu', onMenu)
+  }, [])
+
+  useEffect(() => {
+    const onBlur = () => {
+      clearHold()
+      if (!customOpenRef.current) blockContextRef.current = false
+    }
+    window.addEventListener('blur', onBlur)
+    return () => {
+      onBlur()
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [])
+
+  useEffect(() => {
     const stage = stageRef.current
     if (!stage) return
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
-      applyGramsRef.current(stepGrams(gramsRef.current, event.deltaY < 0 ? 1 : -1))
+      stepSelectedGramsRef.current(event.deltaY < 0 ? 1 : -1)
     }
     stage.addEventListener('wheel', onWheel, { passive: false })
     return () => stage.removeEventListener('wheel', onWheel)
@@ -512,11 +573,11 @@ export default function App() {
           Rückgängig
         </button>
         <span className="grams" role="group" aria-label="Menge in Gramm">
-          <button type="button" onClick={() => applyGrams(stepGrams(grams, -1))} aria-label="5 Gramm weniger">
+          <button type="button" onClick={() => stepSelectedGrams(-1)} aria-label="5 Gramm weniger">
             −5
           </button>
           <span>{grams} g</span>
-          <button type="button" onClick={() => applyGrams(stepGrams(grams, 1))} aria-label="5 Gramm mehr">
+          <button type="button" onClick={() => stepSelectedGrams(1)} aria-label="5 Gramm mehr">
             +5
           </button>
         </span>

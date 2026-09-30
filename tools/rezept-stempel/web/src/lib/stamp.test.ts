@@ -26,4 +26,18 @@ describe('stamp overlay', () => {
     expect(out.getPageCount()).toBe(1)
     expect(out.getPage(0).getSize().height).toBeCloseTo(841.89, 1)
   })
+
+  it('keeps two different gram values when saving', async () => {
+    const src = await PDFDocument.create()
+    src.addPage([595.28, 841.89])
+    const bytes = await src.save()
+    const when = new Date('2026-09-29T12:00:00Z')
+    const stamped = await applyOverlays(bytes, [
+      { id: 'a', pageIndex: 0, x: DEFAULT_STAMP_X, y: DEFAULT_STAMP_Y, grams: 25, when },
+      { id: 'b', pageIndex: 0, x: DEFAULT_STAMP_X, y: DEFAULT_STAMP_Y + 58, grams: 17, when },
+    ])
+    const out = await PDFDocument.load(stamped)
+    expect(out.getPageCount()).toBe(1)
+    expect(stamped.byteLength).toBeGreaterThan(bytes.byteLength)
+  })
 })
