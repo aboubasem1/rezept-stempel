@@ -13,6 +13,7 @@ import { DEFAULT_GRAMS, MAX_GRAMS, MIN_GRAMS, parseCustomGrams, stepGrams } from
 import { CUSTOM_HOLD_MS } from './lib/hold'
 import { defaultStampPoint, type Overlay } from './lib/layout'
 import { createOverlay, hitTestOverlay, stepSelectedOverlayGrams, updateSelectedGrams } from './lib/overlays'
+import { filesFromLaunchParams } from './lib/launch'
 import { canvasClickToPdf, canvasToPdf, drawStamps, loadPdf, renderPageToCanvas } from './lib/pdf'
 import { describeSave, saveStampedPdf } from './lib/save'
 import { applyOverlays } from './lib/stamp'
@@ -40,6 +41,8 @@ export default function App() {
   const [customOpen, setCustomOpen] = useState(false)
   const [customDraft, setCustomDraft] = useState('25')
   const [customError, setCustomError] = useState<string | null>(null)
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [standalone, setStandalone] = useState(false)
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const stampCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const stageRef = useRef<HTMLElement | null>(null)
@@ -166,6 +169,34 @@ export default function App() {
         : `${opened.length} PDFs geöffnet. Klick setzt den Stempel.`,
     )
   }, [])
+
+  useEffect(() => {
+    const standaloneMedia = window.matchMedia('(display-mode: standalone)')
+    const syncStandalone = () => {
+      setStandalone(standaloneMedia.matches || window.navigator.standalone === true)
+    }
+    syncStandalone()
+    standaloneMedia.addEventListener('change', syncStandalone)
+    const onInstallPrompt = (event: BeforeInstallPromptEvent) => {
+      event.preventDefault()
+      setInstallPrompt(event)
+    }
+    window.addEventListener('beforeinstallprompt', onInstallPrompt)
+    return () => {
+      standaloneMedia.removeEventListener('change', syncStandalone)
+      window.removeEventListener('beforeinstallprompt', onInstallPrompt)
+    }
+  }, [])
+
+  useEffect(() => {
+    const queue = window.launchQueue
+    if (!queue) return
+    queue.setConsumer(async (params) => {
+      const collected = await filesFromLaunchParams(params)
+      if (collected.length === 0) return
+      await addFiles(collected)
+    })
+  }, [addFiles])
 
   const onDrop = async (event: DragEvent<HTMLElement>) => {
     event.preventDefault()
@@ -627,10 +658,29 @@ export default function App() {
 
         <section className="stage" ref={stageRef}>
           {!active ? (
-            <button type="button" className="dropzone" onClick={() => void openPicker()}>
-              <strong>PDFs hierher ziehen</strong>
-              <span>oder öffnen. Speichern schreibt eine neue Datei.</span>
-            </button>
+            <div className="empty-stage">
+              <button type="button" className="dropzone" onClick={() => void openPicker()}>
+                <strong>PDFs hierher ziehen</strong>
+                <span>oder öffnen. Speichern schreibt eine neue Datei.</span>
+              </button>
+              <p className="default-app-hint">
+                {standalone
+                  ? 'Windows: Einstellungen → Apps → Standard-Apps → .pdf → Rezept-Stempel. Danach öffnet ein Doppelklick das Rezept hier statt in Adobe.'
+                  : 'Adobe ersetzen: in Edge oder Chrome diese Seite als App installieren, dann unter Windows .pdf auf Rezept-Stempel stellen. Ein normaler Browser-Tab kann das nicht.'}
+              </p>
+              {installPrompt && !standalone ? (
+                <button
+                  type="button"
+                  className="install-app"
+                  onClick={() => {
+                    void installPrompt.prompt()
+                    setInstallPrompt(null)
+                  }}
+                >
+                  Als App installieren
+                </button>
+              ) : null}
+            </div>
           ) : (
             <div className="page-wrap" onContextMenu={(event) => event.preventDefault()}>
               <canvas ref={pageCanvasRef} className="pdf-page" />

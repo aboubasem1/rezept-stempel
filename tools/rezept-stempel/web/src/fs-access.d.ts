@@ -35,7 +35,30 @@ interface DataTransferItem {
   getAsFileSystemHandle?: () => Promise<FileSystemHandle | null>
 }
 
+interface LaunchParams {
+  readonly files: readonly FileSystemHandle[]
+  readonly targetURL: string
+}
+
+interface LaunchQueue {
+  setConsumer(consumer: (params: LaunchParams) => void | Promise<void>): void
+}
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
+interface Navigator {
+  standalone?: boolean
+}
+
 interface Window {
   showOpenFilePicker?: (options?: OpenFilePickerOptions) => Promise<FileSystemFileHandle[]>
   showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandle>
+  launchQueue?: LaunchQueue
+}
+
+interface WindowEventMap {
+  beforeinstallprompt: BeforeInstallPromptEvent
 }

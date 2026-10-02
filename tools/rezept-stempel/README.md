@@ -21,3 +21,14 @@ GitHub → Vercel auto-deploy. `main` ist Production, andere Branches sind Previ
 - Repo: https://github.com/aboubasem1/rezept-stempel
 - Live: https://rezept-stempel.vercel.app
 - Vercel-Projekt: Root Directory `tools/rezept-stempel/web`, Framework Vite, Output `dist`. Keine Env-Vars, keine Serverless Functions.
+
+## Windows: PDF statt Adobe hier öffnen
+
+Ein Browser-Tab kann Adobe nicht ersetzen. Nur die installierte App.
+
+1. In **Microsoft Edge** oder **Chrome** https://rezept-stempel.vercel.app öffnen.
+2. App installieren: Edge `⋯` → Apps → Diese Website als App installieren. Chrome: Installieren-Symbol in der Adressleiste oder `⋮` → Rezept-Stempel installieren.
+3. Windows: **Einstellungen → Apps → Standard-Apps**.
+4. `.pdf` suchen und **Rezept-Stempel** statt Adobe Reader/Acrobat setzen.
+
+Danach öffnet ein Doppelklick auf ein Rezept-PDF die Stempel-Oberfläche. Firefox unterstützt das nicht zuverlässig. Ohne installierte App bleibt Adobe der Standard.

@@ -19,4 +19,4 @@ Production: GitHub → Vercel auto-deploy (`main` = Production, andere Branches 
 - Live: https://rezept-stempel.vercel.app
 - Vercel Root Directory: `tools/rezept-stempel/web`
 
-Details: `tools/rezept-stempel/README.md`.
+Windows: App in Edge/Chrome installieren, dann `.pdf` unter Standard-Apps auf Rezept-Stempel stellen. Details: `tools/rezept-stempel/README.md`.
