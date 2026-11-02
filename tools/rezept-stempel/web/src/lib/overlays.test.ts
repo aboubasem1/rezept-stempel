@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { stepGrams } from './grams'
 import { DEFAULT_STAMP_X, DEFAULT_STAMP_Y, RX_ROW_TOPS } from './layout'
 import { createOverlay, hitTestOverlay, stepSelectedOverlayGrams, updateSelectedGrams } from './overlays'
 
@@ -10,15 +11,20 @@ function stamp(id: string, grams: number, x = DEFAULT_STAMP_X, y = DEFAULT_STAMP
 }
 
 describe('per-stamp grams', () => {
-  it('keeps stamp A at 25g when B is selected and changed to 40g', () => {
+  it('keeps stamp A at 25g when B is selected and wheeled to 40g', () => {
     const a = stamp('a', 25, 200, RX_ROW_TOPS[0] + 12)
     const b = stamp('b', 25, 200, RX_ROW_TOPS[1] + 12)
-    const next = updateSelectedGrams([a, b], 'b', 40, when)
-    expect(next.map((item) => ({ id: item.id, grams: item.grams }))).toEqual([
+    let overlays = [a, b]
+    const selectedId = 'b'
+    for (let step = 0; step < 3; step += 1) {
+      const selected = overlays.find((overlay) => overlay.id === selectedId)
+      expect(selected).toBeDefined()
+      overlays = updateSelectedGrams(overlays, selectedId, stepGrams(selected?.grams ?? 0, 1), when)
+    }
+    expect(overlays.map((item) => ({ id: item.id, grams: item.grams }))).toEqual([
       { id: 'a', grams: 25 },
       { id: 'b', grams: 40 },
     ])
-    expect(next[0]).not.toBe(next[1])
     expect(a.grams).toBe(25)
   })
 
